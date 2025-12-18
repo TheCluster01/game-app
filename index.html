@@ -3,27 +3,45 @@
 <head>
     <title>Game Show</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f9; padding: 20px; }
         .hidden { display: none; }
-        .log-entry { border-bottom: 1px solid #ccc; padding: 5px; }
+        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px; }
+        input { padding: 8px; width: 200px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        .admin-entry { border-left: 5px solid #007bff; padding-left: 10px; margin: 5px 0; }
+        .score-item { display: flex; align-items: center; justify-content: space-between; max-width: 300px; margin-bottom: 5px; }
+        #scoreboard-display { background: #333; color: gold; padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div id="login-screen">
-        <input type="text" id="username" placeholder="Enter your name">
+
+    <div id="login-screen" class="card">
+        <input type="text" id="username" placeholder="Enter your name" onkeydown="if(event.key==='Enter') login()">
         <button onclick="login()">Enter Game</button>
+    </div>
+
+    <div id="scoreboard-view" class="hidden">
+        <h3>Live Scoreboard</h3>
+        <div id="scoreboard-display"></div>
     </div>
 
     <div id="user-screen" class="hidden">
         <h2 id="welcome-msg"></h2>
-        <input type="text" id="answer" placeholder="Type answer here">
-        <button onclick="sendAnswer()">Submit</button>
-        <div id="my-history"><h3>My History:</h3></div>
+        <div class="card">
+            <input type="text" id="answer" placeholder="Type answer..." onkeydown="if(event.key==='Enter') sendAnswer()">
+            <button onclick="sendAnswer()">Submit</button>
+        </div>
+        <div id="my-history"><h3>My Answers (Newest first):</h3></div>
     </div>
 
     <div id="admin-screen" class="hidden">
-        <h2>Admin Console</h2>
-        <button onclick="clearDisplay()">Clear View (Keep Logs)</button>
+        <h2>Admin Console (Gusztika)</h2>
+        <div class="card">
+            <input type="text" id="admin-msg" placeholder="Admin Comment..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
+            <button onclick="sendAdminMsg()">Send as Admin</button>
+            <button onclick="document.getElementById('admin-logs').innerHTML=''" style="background: #dc3545">Clear View</button>
+        </div>
+        <div id="score-controls" class="card"><h3>Manage Scores</h3></div>
         <div id="admin-logs"></div>
     </div>
 
@@ -33,13 +51,13 @@
         let myName = "";
 
         function login() {
-            myName = document.getElementById('username').value;
+            myName = document.getElementById('username').value.trim();
             if (!myName) return;
             document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('scoreboard-view').classList.remove('hidden');
             
-            if (myName === "Guszti007") {
+            if (myName === "gusztika007xd") {
                 document.getElementById('admin-screen').classList.remove('hidden');
-                socket.emit('admin_login');
             } else {
                 document.getElementById('user-screen').classList.remove('hidden');
                 document.getElementById('welcome-msg').innerText = "Player: " + myName;
@@ -48,30 +66,56 @@
 
         function sendAnswer() {
             const box = document.getElementById('answer');
-            const text = box.value;
-            if (!text) return;
-            socket.emit('submit_answer', { name: myName, text: text });
-            document.getElementById('my-history').innerHTML += `<p>${text}</p>`;
+            if (!box.value.trim()) return;
+            socket.emit('submit_answer', { name: myName, text: box.value });
+            box.value = "";
+        }
+
+        function sendAdminMsg() {
+            const box = document.getElementById('admin-msg');
+            if (!box.value.trim()) return;
+            socket.emit('submit_answer', { name: "ADMIN", text: box.value });
             box.value = "";
         }
 
         socket.on('new_log', (data) => {
-            if (myName === "Guszti007") {
+            const timeStr = `[${data.time}]`;
+            if (myName === "gusztika007xd") {
                 const div = document.getElementById('admin-logs');
-                div.innerHTML = `<div class="log-entry"><b>${data.time} - ${data.name}:</b> ${data.text}</div>` + div.innerHTML;
+                div.innerHTML = `<div class="admin-entry"><b>${timeStr} ${data.name}:</b> ${data.text}</div>` + div.innerHTML;
+            }
+            if (data.name === myName || (data.name === "ADMIN" && myName !== "gusztika007xd")) {
+                const hist = document.getElementById('my-history');
+                const id = "msg-" + Date.now();
+                hist.innerHTML = `<div id="${id}" class="card"><b>${timeStr}</b> ${data.text} <button onclick="this.parentElement.remove()" style="background:grey; font-size:10px">Delete</button></div>` + hist.innerHTML;
             }
         });
 
-        socket.on('load_history', (logs) => {
-            logs.forEach(log => {
-                const div = document.getElementById('admin-logs');
-                div.innerHTML = `<div class="log-entry"><b>${log.time} - ${log.name}:</b> ${log.text}</div>` + div.innerHTML;
-            });
+        socket.on('update_scoreboard', (scores) => {
+            const display = document.getElementById('scoreboard-display');
+            const controls = document.getElementById('score-controls');
+            display.innerHTML = "";
+            let controlHTML = "<h3>Manage Scores</h3>";
+
+            for (let name in scores) {
+                display.innerHTML += `<div>${name}: ${scores[name]} pts</div>`;
+                if (myName === "gusztika007xd") {
+                    controlHTML += `
+                    <div class="score-item">
+                        <span>${name}: <b>${scores[name]}</b></span>
+                        <div>
+                            <button onclick="changeScore('${name}', 1)">+</button>
+                            <button onclick="changeScore('${name}', -1)">-</button>
+                            <button onclick="deletePlayer('${name}')" style="background:black">X</button>
+                        </div>
+                    </div>`;
+                }
+            }
+            if (myName === "gusztika007xd") controls.innerHTML = controlHTML;
         });
 
-        function clearDisplay() {
-            document.getElementById('admin-logs').innerHTML = "";
-        }
+        function changeScore(name, delta) { socket.emit('update_score', { name, delta }); }
+        function deletePlayer(name) { if(confirm("Delete "+name+"?")) socket.emit('delete_player', name); }
     </script>
 </body>
 </html>
