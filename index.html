@@ -2,17 +2,69 @@
 <html>
 <head>
     <title>Game Show</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f9; padding: 20px; }
-        .hidden { display: none; }
-        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px; }
-        .admin-msg-style { color: #dc3545; font-weight: bold; border: 2px solid #dc3545; }
-        .log-entry { border-left: 5px solid #007bff; padding: 10px; margin: 5px 0; display: flex; justify-content: space-between; align-items: center; background: #fff; }
-        #scoreboard-display { background: #333; color: gold; padding: 10px; border-radius: 5px; }
-        .score-item { display: flex; align-items: center; justify-content: space-between; max-width: 400px; margin-bottom: 5px; border-bottom: 1px solid #ddd; padding: 5px; }
-        button { padding: 8px 15px; cursor: pointer; border-radius: 4px; border: none; }
-        .btn-blue { background: #007bff; color: white; }
-        .btn-red { background: #dc3545; color: white; }
+        body { 
+    font-family: sans-serif; 
+    padding: 10px; 
+    background: #f4f4f9;
+}
+
+.hidden { display: none; }
+
+.card { 
+    background: white; 
+    padding: 15px; 
+    border-radius: 8px; 
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+    margin-bottom: 10px; 
+}
+
+/* Mobile defaults (Full width) */
+input[type="text"] { 
+    width: 100%; 
+    padding: 12px; 
+    margin-bottom: 10px; 
+    box-sizing: border-box;
+    font-size: 16px; 
+}
+
+button { 
+    width: 100%; 
+    padding: 12px; 
+    border-radius: 4px; 
+    border: none; 
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* PC Overrides (Restores your current look) */
+@media (min-width: 600px) {
+    body { padding: 40px; }
+    
+    input[type="text"] { 
+        width: 250px; 
+        margin-bottom: 0; 
+    }
+    
+    button { 
+        width: auto; 
+    }
+
+    .score-item { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        max-width: 500px;
+    }
+}
+
+/* Shared Colors */
+.btn-blue { background: #007bff; color: white; }
+.btn-red { background: #dc3545; color: white; }
+.admin-msg-style { border: 2px solid #dc3545; color: #dc3545; }
+#scoreboard-display { background: #333; color: gold; padding: 10px; border-radius: 5px; }
+
     </style>
 </head>
 <body>
@@ -31,7 +83,8 @@
         <h2 id="welcome-msg"></h2>
         <div class="card">
             <input type="text" id="answer" placeholder="Type answer..." onkeydown="if(event.key==='Enter') sendAnswer()">
-            <button class="btn-blue" onclick="sendAnswer()">Submit</button>
+            <button id="submit-btn" class="btn-blue" onclick="sendAnswer()">Submit</button>
+            <p id="limit-status" style="font-weight: bold; color: #555;"></p>
         </div>
         <h3>My Answers (Newest first):</h3>
         <div id="my-history"></div>
@@ -40,10 +93,21 @@
     <div id="admin-screen" class="hidden">
         <h2>Admin Console</h2>
         <div class="card">
+            <div class="quick-buttons">
+                <button class="btn-orange" onclick="quickSend('1')">1</button>
+                <button class="btn-orange" onclick="quickSend('2')">2</button>
+                <button class="btn-orange" onclick="quickSend('3')">3</button>
+                <button class="btn-green" onclick="quickSend('--- NEW ROUND ---')">NEW ROUND</button>
+            </div>
             <input type="text" id="admin-msg" placeholder="Broadcast message..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
             <button class="btn-blue" onclick="sendAdminMsg()">Send as ADMIN</button>
+            <button id="toggle-sb-btn" onclick="toggleScoreboard()">Hide Scoreboard</button>
+        </div>
+        <div class="card">
+            <label>Set Message Limit per Player:</label><br>
+            <input type="number" id="limit-input" value="1" style="width: 80px;">
+            <button class="btn-blue" onclick="setLimit()">Set Limit / Reset Counts</button>
             <button class="btn-red" onclick="document.getElementById('admin-logs').innerHTML=''">Clear View Only</button>
-            <button id="toggle-sb-btn" onclick="toggleScoreboard()">Hide Scoreboard from Players</button>
         </div>
         <div id="score-controls" class="card"></div>
         <h3>Messages Log</h3>
@@ -55,34 +119,65 @@
         const socket = io();
         let myName = "";
         let scoreboardVisible = true;
+        let currentLimit = 0;
+        let messagesSentThisRound = 0;
 
         function login() {
             const nameInput = document.getElementById('username').value.trim();
-            if (!nameInput) return;
-            
-            socket.emit('check_name', nameInput, (response) => {
-                if (response.success) {
+            socket.emit('check_name', nameInput, (res) => {
+                if (res.success) {
                     myName = nameInput;
                     document.getElementById('login-screen').classList.add('hidden');
                     if (myName === "gusztika007xd") {
                         document.getElementById('admin-screen').classList.remove('hidden');
-                        document.getElementById('scoreboard-view').classList.remove('hidden');
                     } else {
                         document.getElementById('user-screen').classList.remove('hidden');
                         document.getElementById('welcome-msg').innerText = "Player: " + myName;
                     }
-                } else {
-                    alert(response.message);
-                }
+                    document.getElementById('scoreboard-view').classList.remove('hidden');
+                } else { alert(res.message); }
             });
         }
 
+        function setLimit() {
+            const val = document.getElementById('limit-input').value;
+            socket.emit('set_limit', val);
+        }
+
+        function quickSend(val) {
+            socket.emit('submit_answer', { name: "ADMIN", text: val });
+        }
+
         function sendAnswer() {
+            if (currentLimit > 0 && messagesSentThisRound >= currentLimit) return;
             const box = document.getElementById('answer');
             if (!box.value.trim()) return;
+            messagesSentThisRound++;
             socket.emit('submit_answer', { name: myName, text: box.value });
             box.value = "";
+            updateLimitDisplay();
         }
+
+        function updateLimitDisplay() {
+            const status = document.getElementById('limit-status');
+            const btn = document.getElementById('submit-btn');
+            if (currentLimit > 0) {
+                const remaining = currentLimit - messagesSentThisRound;
+                status.innerText = `Remaining: ${remaining < 0 ? 0 : remaining}`;
+                btn.disabled = (remaining <= 0);
+                btn.style.opacity = (remaining <= 0) ? "0.5" : "1";
+            } else {
+                status.innerText = "Unlimited messages";
+                btn.disabled = false;
+                btn.style.opacity = "1";
+            }
+        }
+
+        socket.on('update_limit', (limit) => {
+            currentLimit = parseInt(limit);
+            messagesSentThisRound = 0; 
+            updateLimitDisplay();
+        });
 
         function sendAdminMsg() {
             const box = document.getElementById('admin-msg');
@@ -122,49 +217,42 @@
         });
 
         socket.on('remove_msg_client', (id) => {
-            const elAdmin = document.getElementById(`log-${id}`);
-            if (elAdmin) elAdmin.remove();
-            const elUser = document.getElementById(`client-log-${id}`);
-            if (elUser) elUser.remove();
+            const elA = document.getElementById(`log-${id}`); if(elA) elA.remove();
+            const elU = document.getElementById(`client-log-${id}`); if(elU) elU.remove();
         });
 
         socket.on('update_scoreboard', (data) => {
             const { scores, visible } = data;
             const display = document.getElementById('scoreboard-view');
-            const displayContent = document.getElementById('scoreboard-display');
+            const content = document.getElementById('scoreboard-display');
             const controls = document.getElementById('score-controls');
             const toggleBtn = document.getElementById('toggle-sb-btn');
 
             if (myName !== "gusztika007xd") {
                 display.className = visible ? "" : "hidden";
             } else {
-                toggleBtn.innerText = visible ? "Hide Scoreboard from Players" : "Show Scoreboard to Players";
+                toggleBtn.innerText = visible ? "Hide Scoreboard" : "Show Scoreboard";
             }
 
-            displayContent.innerHTML = "";
-            let controlHTML = "<h3>Manage Scores & Players</h3>";
-
+            content.innerHTML = "";
+            let ctrlHTML = "<h3>Scores</h3>";
             for (let name in scores) {
-                displayContent.innerHTML += `<div>${name}: ${scores[name]} pts</div>`;
+                content.innerHTML += `<div>${name}: ${scores[name]} pts</div>`;
                 if (myName === "gusztika007xd") {
-                    controlHTML += `<div class="score-item">
+                    ctrlHTML += `<div class="score-item">
                         <span>${name}: <b>${scores[name]}</b></span>
                         <div>
                             <button class="btn-blue" onclick="socket.emit('update_score', {name:'${name}', delta:1})">+</button>
                             <button class="btn-blue" onclick="socket.emit('update_score', {name:'${name}', delta:-1})">-</button>
-                            <button class="btn-red" onclick="if(confirm('Delete ${name}?')) socket.emit('delete_player', '${name}')">Delete Player</button>
+                            <button class="btn-red" onclick="if(confirm('Delete ${name}?')) socket.emit('delete_player', '${name}')">X</button>
                         </div>
                     </div>`;
                 }
             }
-            if (myName === "gusztika007xd") controls.innerHTML = controlHTML;
+            if (myName === "gusztika007xd") controls.innerHTML = ctrlHTML;
         });
 
-        socket.on('load_history', (logs) => {
-            logs.forEach(log => {
-                // Logic same as new_log but triggered on refresh
-            });
-        });
+        socket.on('load_history', (l) => { logs = l; });
     </script>
 </body>
 </html>

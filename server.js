@@ -10,6 +10,8 @@ const io = new Server(server);
 let logs = []; 
 let scores = {}; 
 let showScoreboard = true;
+let submissionLimit = 0; 
+let playerMessageCounts = {}; 
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -18,9 +20,13 @@ app.get('/', (req, res) => {
 io.on('connection', (socket) => {
     socket.emit('load_history', logs);
     socket.emit('update_scoreboard', { scores, visible: showScoreboard });
+    socket.emit('update_limit', submissionLimit);
 
     socket.on('check_name', (name, callback) => {
-        if (name === "gusztika007xd") {
+        const forbidden = ["ADMIN", "admin", "Admin", "SYSTEM"];
+        if (forbidden.includes(name)) {
+            callback({ success: false, message: "Name 'ADMIN' is reserved." });
+        } else if (name === "gusztika007xd") {
             callback({ success: true });
         } else if (scores.hasOwnProperty(name)) {
             callback({ success: false, message: "Name already taken!" });
@@ -29,16 +35,29 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('set_limit', (num) => {
+        submissionLimit = parseInt(num);
+        playerMessageCounts = {}; 
+        io.emit('update_limit', submissionLimit);
+    });
+
     socket.on('submit_answer', (data) => {
+        const name = data.name;
+        if (name !== "ADMIN" && name !== "gusztika007xd" && submissionLimit > 0) {
+            playerMessageCounts[name] = (playerMessageCounts[name] || 0) + 1;
+            if (playerMessageCounts[name] > submissionLimit) return;
+        }
+
         const entry = {
             id: Date.now() + Math.random(),
-            name: data.name,
+            name: name,
             text: data.text,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
         };
+        
         logs.push(entry);
-        if (data.name !== "ADMIN" && data.name !== "gusztika007xd") {
-            if (!(data.name in scores)) scores[data.name] = 0;
+        if (name !== "ADMIN" && name !== "gusztika007xd" && !(name in scores)) {
+            scores[name] = 0;
         }
         
         io.emit('new_log', entry);
@@ -64,6 +83,7 @@ io.on('connection', (socket) => {
 
     socket.on('delete_player', (name) => {
         delete scores[name];
+        delete playerMessageCounts[name];
         io.emit('update_scoreboard', { scores, visible: showScoreboard });
     });
 });
