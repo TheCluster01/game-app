@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Game Show</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .hidden { display: none; }
+        .log-entry { border-bottom: 1px solid #ccc; padding: 5px; }
+    </style>
+</head>
+<body>
+    <div id="login-screen">
+        <input type="text" id="username" placeholder="Enter your name">
+        <button onclick="login()">Enter Game</button>
+    </div>
+
+    <div id="user-screen" class="hidden">
+        <h2 id="welcome-msg"></h2>
+        <input type="text" id="answer" placeholder="Type answer here">
+        <button onclick="sendAnswer()">Submit</button>
+        <div id="my-history"><h3>My History:</h3></div>
+    </div>
+
+    <div id="admin-screen" class="hidden">
+        <h2>Admin Console</h2>
+        <button onclick="clearDisplay()">Clear View (Keep Logs)</button>
+        <div id="admin-logs"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let myName = "";
+
+        function login() {
+            myName = document.getElementById('username').value;
+            if (!myName) return;
+            document.getElementById('login-screen').classList.add('hidden');
+            
+            if (myName === "Guszti007") {
+                document.getElementById('admin-screen').classList.remove('hidden');
+                socket.emit('admin_login');
+            } else {
+                document.getElementById('user-screen').classList.remove('hidden');
+                document.getElementById('welcome-msg').innerText = "Player: " + myName;
+            }
+        }
+
+        function sendAnswer() {
+            const box = document.getElementById('answer');
+            const text = box.value;
+            if (!text) return;
+            socket.emit('submit_answer', { name: myName, text: text });
+            document.getElementById('my-history').innerHTML += `<p>${text}</p>`;
+            box.value = "";
+        }
+
+        socket.on('new_log', (data) => {
+            if (myName === "Guszti007") {
+                const div = document.getElementById('admin-logs');
+                div.innerHTML = `<div class="log-entry"><b>${data.time} - ${data.name}:</b> ${data.text}</div>` + div.innerHTML;
+            }
+        });
+
+        socket.on('load_history', (logs) => {
+            logs.forEach(log => {
+                const div = document.getElementById('admin-logs');
+                div.innerHTML = `<div class="log-entry"><b>${log.time} - ${log.name}:</b> ${log.text}</div>` + div.innerHTML;
+            });
+        });
+
+        function clearDisplay() {
+            document.getElementById('admin-logs').innerHTML = "";
+        }
+    </script>
+</body>
+</html>
