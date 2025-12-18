@@ -6,18 +6,20 @@
         body { font-family: 'Segoe UI', sans-serif; background: #f4f4f9; padding: 20px; }
         .hidden { display: none; }
         .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px; }
-        input { padding: 8px; width: 200px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
-        .admin-entry { border-left: 5px solid #007bff; padding-left: 10px; margin: 5px 0; }
-        .score-item { display: flex; align-items: center; justify-content: space-between; max-width: 300px; margin-bottom: 5px; }
+        .admin-msg-style { color: #dc3545; font-weight: bold; border: 2px solid #dc3545; }
+        .log-entry { border-left: 5px solid #007bff; padding: 10px; margin: 5px 0; display: flex; justify-content: space-between; align-items: center; background: #fff; }
         #scoreboard-display { background: #333; color: gold; padding: 10px; border-radius: 5px; }
+        .score-item { display: flex; align-items: center; justify-content: space-between; max-width: 400px; margin-bottom: 5px; border-bottom: 1px solid #ddd; padding: 5px; }
+        button { padding: 8px 15px; cursor: pointer; border-radius: 4px; border: none; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-red { background: #dc3545; color: white; }
     </style>
 </head>
 <body>
 
     <div id="login-screen" class="card">
         <input type="text" id="username" placeholder="Enter your name" onkeydown="if(event.key==='Enter') login()">
-        <button onclick="login()">Enter Game</button>
+        <button class="btn-blue" onclick="login()">Enter Game</button>
     </div>
 
     <div id="scoreboard-view" class="hidden">
@@ -29,19 +31,22 @@
         <h2 id="welcome-msg"></h2>
         <div class="card">
             <input type="text" id="answer" placeholder="Type answer..." onkeydown="if(event.key==='Enter') sendAnswer()">
-            <button onclick="sendAnswer()">Submit</button>
+            <button class="btn-blue" onclick="sendAnswer()">Submit</button>
         </div>
-        <div id="my-history"><h3>My Answers (Newest first):</h3></div>
+        <h3>My Answers (Newest first):</h3>
+        <div id="my-history"></div>
     </div>
 
     <div id="admin-screen" class="hidden">
-        <h2>Admin Console (Gusztika)</h2>
+        <h2>Admin Console</h2>
         <div class="card">
-            <input type="text" id="admin-msg" placeholder="Admin Comment..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
-            <button onclick="sendAdminMsg()">Send as Admin</button>
-            <button onclick="document.getElementById('admin-logs').innerHTML=''" style="background: #dc3545">Clear View</button>
+            <input type="text" id="admin-msg" placeholder="Broadcast message..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
+            <button class="btn-blue" onclick="sendAdminMsg()">Send as ADMIN</button>
+            <button class="btn-red" onclick="document.getElementById('admin-logs').innerHTML=''">Clear View Only</button>
+            <button id="toggle-sb-btn" onclick="toggleScoreboard()">Hide Scoreboard from Players</button>
         </div>
-        <div id="score-controls" class="card"><h3>Manage Scores</h3></div>
+        <div id="score-controls" class="card"></div>
+        <h3>Messages Log</h3>
         <div id="admin-logs"></div>
     </div>
 
@@ -49,19 +54,27 @@
     <script>
         const socket = io();
         let myName = "";
+        let scoreboardVisible = true;
 
         function login() {
-            myName = document.getElementById('username').value.trim();
-            if (!myName) return;
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('scoreboard-view').classList.remove('hidden');
+            const nameInput = document.getElementById('username').value.trim();
+            if (!nameInput) return;
             
-            if (myName === "gusztika007xd") {
-                document.getElementById('admin-screen').classList.remove('hidden');
-            } else {
-                document.getElementById('user-screen').classList.remove('hidden');
-                document.getElementById('welcome-msg').innerText = "Player: " + myName;
-            }
+            socket.emit('check_name', nameInput, (response) => {
+                if (response.success) {
+                    myName = nameInput;
+                    document.getElementById('login-screen').classList.add('hidden');
+                    if (myName === "gusztika007xd") {
+                        document.getElementById('admin-screen').classList.remove('hidden');
+                        document.getElementById('scoreboard-view').classList.remove('hidden');
+                    } else {
+                        document.getElementById('user-screen').classList.remove('hidden');
+                        document.getElementById('welcome-msg').innerText = "Player: " + myName;
+                    }
+                } else {
+                    alert(response.message);
+                }
+            });
         }
 
         function sendAnswer() {
@@ -78,35 +91,68 @@
             box.value = "";
         }
 
+        function toggleScoreboard() {
+            scoreboardVisible = !scoreboardVisible;
+            socket.emit('toggle_scoreboard', scoreboardVisible);
+        }
+
         socket.on('new_log', (data) => {
+            const isMsgAdmin = data.name === "ADMIN";
             const timeStr = `[${data.time}]`;
+            
             if (myName === "gusztika007xd") {
                 const div = document.getElementById('admin-logs');
-                div.innerHTML = `<div class="admin-entry"><b>${timeStr} ${data.name}:</b> ${data.text}</div>` + div.innerHTML;
+                const entry = document.createElement('div');
+                entry.id = `log-${data.id}`;
+                entry.className = 'log-entry';
+                entry.innerHTML = `<span><b>${timeStr} ${data.name}:</b> ${data.text}</span>
+                                   <button class="btn-red" onclick="socket.emit('delete_msg', ${data.id})">Delete</button>`;
+                div.prepend(entry);
             }
-            if (data.name === myName || (data.name === "ADMIN" && myName !== "gusztika007xd")) {
+
+            if (data.name === myName || isMsgAdmin) {
                 const hist = document.getElementById('my-history');
-                const id = "msg-" + Date.now();
-                hist.innerHTML = `<div id="${id}" class="card"><b>${timeStr}</b> ${data.text} <button onclick="this.parentElement.remove()" style="background:grey; font-size:10px">Delete</button></div>` + hist.innerHTML;
+                const card = document.createElement('div');
+                card.id = `client-log-${data.id}`;
+                card.className = 'card' + (isMsgAdmin ? ' admin-msg-style' : '');
+                card.innerHTML = `<b>${timeStr} ${isMsgAdmin ? 'ADMIN' : ''}:</b> ${data.text} 
+                                  <button onclick="this.parentElement.remove()" style="font-size:10px">Dismiss</button>`;
+                hist.prepend(card);
             }
         });
 
-        socket.on('update_scoreboard', (scores) => {
-            const display = document.getElementById('scoreboard-display');
+        socket.on('remove_msg_client', (id) => {
+            const elAdmin = document.getElementById(`log-${id}`);
+            if (elAdmin) elAdmin.remove();
+            const elUser = document.getElementById(`client-log-${id}`);
+            if (elUser) elUser.remove();
+        });
+
+        socket.on('update_scoreboard', (data) => {
+            const { scores, visible } = data;
+            const display = document.getElementById('scoreboard-view');
+            const displayContent = document.getElementById('scoreboard-display');
             const controls = document.getElementById('score-controls');
-            display.innerHTML = "";
-            let controlHTML = "<h3>Manage Scores</h3>";
+            const toggleBtn = document.getElementById('toggle-sb-btn');
+
+            if (myName !== "gusztika007xd") {
+                display.className = visible ? "" : "hidden";
+            } else {
+                toggleBtn.innerText = visible ? "Hide Scoreboard from Players" : "Show Scoreboard to Players";
+            }
+
+            displayContent.innerHTML = "";
+            let controlHTML = "<h3>Manage Scores & Players</h3>";
 
             for (let name in scores) {
-                display.innerHTML += `<div>${name}: ${scores[name]} pts</div>`;
+                displayContent.innerHTML += `<div>${name}: ${scores[name]} pts</div>`;
                 if (myName === "gusztika007xd") {
-                    controlHTML += `
-                    <div class="score-item">
+                    controlHTML += `<div class="score-item">
                         <span>${name}: <b>${scores[name]}</b></span>
                         <div>
-                            <button onclick="changeScore('${name}', 1)">+</button>
-                            <button onclick="changeScore('${name}', -1)">-</button>
-                            <button onclick="deletePlayer('${name}')" style="background:black">X</button>
+                            <button class="btn-blue" onclick="socket.emit('update_score', {name:'${name}', delta:1})">+</button>
+                            <button class="btn-blue" onclick="socket.emit('update_score', {name:'${name}', delta:-1})">-</button>
+                            <button class="btn-red" onclick="if(confirm('Delete ${name}?')) socket.emit('delete_player', '${name}')">Delete Player</button>
                         </div>
                     </div>`;
                 }
@@ -114,8 +160,11 @@
             if (myName === "gusztika007xd") controls.innerHTML = controlHTML;
         });
 
-        function changeScore(name, delta) { socket.emit('update_score', { name, delta }); }
-        function deletePlayer(name) { if(confirm("Delete "+name+"?")) socket.emit('delete_player', name); }
+        socket.on('load_history', (logs) => {
+            logs.forEach(log => {
+                // Logic same as new_log but triggered on refresh
+            });
+        });
     </script>
 </body>
 </html>
