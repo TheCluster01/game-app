@@ -4,73 +4,34 @@
     <title>Game Show</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { 
-    font-family: sans-serif; 
-    padding: 10px; 
-    background: #f4f4f9;
-}
-
-.hidden { display: none; }
-
-.card { 
-    background: white; 
-    padding: 15px; 
-    border-radius: 8px; 
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
-    margin-bottom: 10px; 
-}
-
-/* Mobile defaults (Full width) */
-input[type="text"] { 
-    width: 100%; 
-    padding: 12px; 
-    margin-bottom: 10px; 
-    box-sizing: border-box;
-    font-size: 16px; 
-}
-
-button { 
-    width: 100%; 
-    padding: 12px; 
-    border-radius: 4px; 
-    border: none; 
-    cursor: pointer;
-    font-weight: bold;
-}
-
-/* PC Overrides (Restores your current look) */
-@media (min-width: 600px) {
-    body { padding: 40px; }
-    
-    input[type="text"] { 
-        width: 250px; 
-        margin-bottom: 0; 
-    }
-    
-    button { 
-        width: auto; 
-    }
-
-    .score-item { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        max-width: 500px;
-    }
-}
-
-/* Shared Colors */
-.btn-blue { background: #007bff; color: white; }
-.btn-red { background: #dc3545; color: white; }
-.admin-msg-style { border: 2px solid #dc3545; color: #dc3545; }
-#scoreboard-display { background: #333; color: gold; padding: 10px; border-radius: 5px; }
-
+        body { font-family: sans-serif; padding: 10px; background: #f4f4f9; }
+        .hidden { display: none; }
+        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 12px; margin-bottom: 10px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 12px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; margin-bottom: 5px; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-red { background: #dc3545; color: white; }
+        .btn-green { background: #28a745; color: white; }
+        .btn-orange { background: #fd7e14; color: white; }
+        .admin-msg-style { border: 2px solid #dc3545; color: #dc3545; font-weight: bold; }
+        .correct-msg-style { border: 2px solid #28a745; color: #28a745; font-weight: bold; }
+        #scoreboard-display { background: #333; color: gold; padding: 10px; border-radius: 5px; }
+        .log-entry { border-left: 5px solid #007bff; padding: 10px; margin: 5px 0; background: #fff; display: flex; justify-content: space-between; }
+        .quick-buttons { display: flex; gap: 5px; margin-bottom: 10px; }
+        .quick-buttons button { flex: 1; }
+        
+        @media (min-width: 600px) {
+            body { padding: 40px; }
+            input[type="text"], input[type="number"] { width: 250px; margin-bottom: 0; }
+            button { width: auto; }
+            .score-item { display: flex; justify-content: space-between; align-items: center; max-width: 500px; border-bottom: 1px solid #ddd; padding: 10px 0; }
+        }
     </style>
 </head>
 <body>
 
     <div id="login-screen" class="card">
-        <input type="text" id="username" placeholder="Enter your name" onkeydown="if(event.key==='Enter') login()">
+        <input type="text" id="username" placeholder="Enter name" onkeydown="if(event.key==='Enter') login()">
         <button class="btn-blue" onclick="login()">Enter Game</button>
     </div>
 
@@ -86,6 +47,9 @@ button {
             <button id="submit-btn" class="btn-blue" onclick="sendAnswer()">Submit</button>
             <p id="limit-status" style="font-weight: bold; color: #555;"></p>
         </div>
+        <div id="correct-notif" class="hidden btn-green" style="padding: 10px; text-align: center; border-radius: 8px; margin-bottom: 10px;">
+            CORRECT! 🎉
+        </div>
         <h3>My Answers (Newest first):</h3>
         <div id="my-history"></div>
     </div>
@@ -99,18 +63,19 @@ button {
                 <button class="btn-orange" onclick="quickSend('3')">3</button>
                 <button class="btn-green" onclick="quickSend('--- NEW ROUND ---')">NEW ROUND</button>
             </div>
-            <input type="text" id="admin-msg" placeholder="Broadcast message..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
+            <input type="text" id="admin-msg" placeholder="Admin message..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
             <button class="btn-blue" onclick="sendAdminMsg()">Send as ADMIN</button>
-            <button id="toggle-sb-btn" onclick="toggleScoreboard()">Hide Scoreboard</button>
+            <button id="lock-btn" class="btn-orange" onclick="toggleLock()">Lock Submissions</button>
         </div>
         <div class="card">
-            <label>Set Message Limit per Player:</label><br>
-            <input type="number" id="limit-input" value="1" style="width: 80px;">
-            <button class="btn-blue" onclick="setLimit()">Set Limit / Reset Counts</button>
-            <button class="btn-red" onclick="document.getElementById('admin-logs').innerHTML=''">Clear View Only</button>
+            <label>Correct Answer (commas for multiple):</label><br>
+            <input type="text" id="correct-input" placeholder="e.g. Ahri, ahri" onchange="updateCorrect()">
+            <br><label>Limit:</label>
+            <input type="number" id="limit-input" value="1" style="width: 60px;">
+            <button class="btn-blue" onclick="setLimit()">Set Limit / Reset</button>
+            <button class="btn-red" onclick="document.getElementById('admin-logs').innerHTML=''">Clear View</button>
         </div>
         <div id="score-controls" class="card"></div>
-        <h3>Messages Log</h3>
         <div id="admin-logs"></div>
     </div>
 
@@ -118,39 +83,49 @@ button {
     <script>
         const socket = io();
         let myName = "";
-        let scoreboardVisible = true;
         let currentLimit = 0;
         let messagesSentThisRound = 0;
+        let isLocked = false;
 
         function login() {
-            const nameInput = document.getElementById('username').value.trim();
-            socket.emit('check_name', nameInput, (res) => {
+            const name = document.getElementById('username').value.trim();
+            socket.emit('check_name', name, (res) => {
                 if (res.success) {
-                    myName = nameInput;
+                    myName = name;
                     document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('scoreboard-view').classList.remove('hidden');
                     if (myName === "gusztika007xd") {
                         document.getElementById('admin-screen').classList.remove('hidden');
                     } else {
                         document.getElementById('user-screen').classList.remove('hidden');
                         document.getElementById('welcome-msg').innerText = "Player: " + myName;
                     }
-                    document.getElementById('scoreboard-view').classList.remove('hidden');
-                } else { alert(res.message); }
+                } else alert(res.message);
             });
         }
 
-        function setLimit() {
-            const val = document.getElementById('limit-input').value;
-            socket.emit('set_limit', val);
+        function toggleLock() {
+            isLocked = !isLocked;
+            socket.emit('toggle_lock', isLocked);
         }
 
-        function quickSend(val) {
-            socket.emit('submit_answer', { name: "ADMIN", text: val });
+        socket.on('lock_status', (status) => {
+            isLocked = status;
+            if (myName === "gusztika007xd") {
+                document.getElementById('lock-btn').innerText = isLocked ? "Unlock Submissions" : "Lock Submissions";
+                document.getElementById('lock-btn').className = isLocked ? "btn-green" : "btn-orange";
+            }
+            updateLimitDisplay();
+        });
+
+        function updateCorrect() {
+            socket.emit('set_correct_answer', document.getElementById('correct-input').value);
         }
 
         function sendAnswer() {
-            if (currentLimit > 0 && messagesSentThisRound >= currentLimit) return;
+            if (isLocked) return;
             const box = document.getElementById('answer');
+            if (currentLimit > 0 && messagesSentThisRound >= currentLimit) return;
             if (!box.value.trim()) return;
             messagesSentThisRound++;
             socket.emit('submit_answer', { name: myName, text: box.value });
@@ -158,101 +133,91 @@ button {
             updateLimitDisplay();
         }
 
+        socket.on('correct_notification', () => {
+            const notif = document.getElementById('correct-notif');
+            notif.classList.remove('hidden');
+            setTimeout(() => notif.classList.add('hidden'), 3000);
+        });
+
         function updateLimitDisplay() {
             const status = document.getElementById('limit-status');
             const btn = document.getElementById('submit-btn');
+            if (isLocked && myName !== "gusztika007xd") {
+                status.innerText = "Submissions Locked";
+                btn.disabled = true;
+                btn.style.opacity = "0.5";
+                return;
+            }
             if (currentLimit > 0) {
-                const remaining = currentLimit - messagesSentThisRound;
-                status.innerText = `Remaining: ${remaining < 0 ? 0 : remaining}`;
-                btn.disabled = (remaining <= 0);
-                btn.style.opacity = (remaining <= 0) ? "0.5" : "1";
+                const rem = currentLimit - messagesSentThisRound;
+                status.innerText = `Remaining: ${rem < 0 ? 0 : rem}`;
+                btn.disabled = rem <= 0;
+                btn.style.opacity = rem <= 0 ? "0.5" : "1";
             } else {
-                status.innerText = "Unlimited messages";
+                status.innerText = "";
                 btn.disabled = false;
                 btn.style.opacity = "1";
             }
         }
 
-        socket.on('update_limit', (limit) => {
-            currentLimit = parseInt(limit);
-            messagesSentThisRound = 0; 
-            updateLimitDisplay();
-        });
-
+        socket.on('update_limit', (l) => { currentLimit = l; messagesSentThisRound = 0; updateLimitDisplay(); });
+        function quickSend(t) { socket.emit('submit_answer', { name: "ADMIN", text: t }); }
         function sendAdminMsg() {
-            const box = document.getElementById('admin-msg');
-            if (!box.value.trim()) return;
-            socket.emit('submit_answer', { name: "ADMIN", text: box.value });
-            box.value = "";
-        }
-
-        function toggleScoreboard() {
-            scoreboardVisible = !scoreboardVisible;
-            socket.emit('toggle_scoreboard', scoreboardVisible);
+            const b = document.getElementById('admin-msg');
+            if(b.value.trim()) socket.emit('submit_answer', { name: "ADMIN", text: b.value });
+            b.value = "";
         }
 
         socket.on('new_log', (data) => {
-            const isMsgAdmin = data.name === "ADMIN";
-            const timeStr = `[${data.time}]`;
-            
+            const isAdm = data.name === "ADMIN";
+            const time = `[${data.time}]`;
             if (myName === "gusztika007xd") {
                 const div = document.getElementById('admin-logs');
                 const entry = document.createElement('div');
                 entry.id = `log-${data.id}`;
                 entry.className = 'log-entry';
-                entry.innerHTML = `<span><b>${timeStr} ${data.name}:</b> ${data.text}</span>
-                                   <button class="btn-red" onclick="socket.emit('delete_msg', ${data.id})">Delete</button>`;
+                if(data.isCorrect) entry.style.borderLeft = "10px solid #28a745";
+                entry.innerHTML = `<span><b>${time} ${data.name}:</b> ${data.text}</span>
+                                   <button class="btn-red" onclick="socket.emit('delete_msg', ${data.id})">Del</button>`;
                 div.prepend(entry);
             }
-
-            if (data.name === myName || isMsgAdmin) {
+            if (data.name === myName || isAdm) {
                 const hist = document.getElementById('my-history');
                 const card = document.createElement('div');
-                card.id = `client-log-${data.id}`;
-                card.className = 'card' + (isMsgAdmin ? ' admin-msg-style' : '');
-                card.innerHTML = `<b>${timeStr} ${isMsgAdmin ? 'ADMIN' : ''}:</b> ${data.text} 
-                                  <button onclick="this.parentElement.remove()" style="font-size:10px">Dismiss</button>`;
+                card.id = `cl-${data.id}`;
+                card.className = 'card' + (isAdm ? ' admin-msg-style' : '') + (data.isCorrect ? ' correct-msg-style' : '');
+                card.innerHTML = `<b>${time} ${isAdm ? 'ADMIN' : ''}:</b> ${data.text} <button onclick="this.parentElement.remove()" style="font-size:10px">X</button>`;
                 hist.prepend(card);
             }
         });
 
         socket.on('remove_msg_client', (id) => {
-            const elA = document.getElementById(`log-${id}`); if(elA) elA.remove();
-            const elU = document.getElementById(`client-log-${id}`); if(elU) elU.remove();
+            const a = document.getElementById(`log-${id}`); if(a) a.remove();
+            const u = document.getElementById(`cl-${id}`); if(u) u.remove();
         });
 
-        socket.on('update_scoreboard', (data) => {
-            const { scores, visible } = data;
-            const display = document.getElementById('scoreboard-view');
-            const content = document.getElementById('scoreboard-display');
-            const controls = document.getElementById('score-controls');
-            const toggleBtn = document.getElementById('toggle-sb-btn');
-
-            if (myName !== "gusztika007xd") {
-                display.className = visible ? "" : "hidden";
-            } else {
-                toggleBtn.innerText = visible ? "Hide Scoreboard" : "Show Scoreboard";
-            }
-
-            content.innerHTML = "";
-            let ctrlHTML = "<h3>Scores</h3>";
-            for (let name in scores) {
-                content.innerHTML += `<div>${name}: ${scores[name]} pts</div>`;
+        socket.on('update_scoreboard', (d) => {
+            const { scores, visible } = d;
+            const view = document.getElementById('scoreboard-view');
+            const cont = document.getElementById('scoreboard-display');
+            const ctrl = document.getElementById('score-controls');
+            if (myName !== "gusztika007xd") view.className = visible ? "" : "hidden";
+            cont.innerHTML = "";
+            let cHTML = "<h3>Scores</h3>";
+            for (let n in scores) {
+                cont.innerHTML += `<div>${n}: ${scores[n]} pts</div>`;
                 if (myName === "gusztika007xd") {
-                    ctrlHTML += `<div class="score-item">
-                        <span>${name}: <b>${scores[name]}</b></span>
-                        <div>
-                            <button class="btn-blue" onclick="socket.emit('update_score', {name:'${name}', delta:1})">+</button>
-                            <button class="btn-blue" onclick="socket.emit('update_score', {name:'${name}', delta:-1})">-</button>
-                            <button class="btn-red" onclick="if(confirm('Delete ${name}?')) socket.emit('delete_player', '${name}')">X</button>
-                        </div>
-                    </div>`;
+                    cHTML += `<div class="score-item"><span>${n}: <b>${scores[n]}</b></span><div>
+                        <button class="btn-blue" onclick="socket.emit('update_score',{name:'${n}',delta:1})">+</button>
+                        <button class="btn-blue" onclick="socket.emit('update_score',{name:'${n}',delta:-1})">-</button>
+                        <button class="btn-red" onclick="if(confirm('Del ${n}?')) socket.emit('delete_player','${n}')">X</button>
+                    </div></div>`;
                 }
             }
-            if (myName === "gusztika007xd") controls.innerHTML = ctrlHTML;
+            if (myName === "gusztika007xd") ctrl.innerHTML = cHTML;
         });
 
-        socket.on('load_history', (l) => { logs = l; });
+        function setLimit() { socket.emit('set_limit', document.getElementById('limit-input').value); }
     </script>
 </body>
 </html>

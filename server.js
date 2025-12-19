@@ -10,6 +10,8 @@ const io = new Server(server);
 let logs = []; 
 let scores = {}; 
 let showScoreboard = true;
+let submissionsLocked = false;
+let correctAnswer = ""; // Admin sets this
 let submissionLimit = 0; 
 let playerMessageCounts = {}; 
 
@@ -21,18 +23,21 @@ io.on('connection', (socket) => {
     socket.emit('load_history', logs);
     socket.emit('update_scoreboard', { scores, visible: showScoreboard });
     socket.emit('update_limit', submissionLimit);
+    socket.emit('lock_status', submissionsLocked);
 
     socket.on('check_name', (name, callback) => {
-        const forbidden = ["ADMIN", "admin", "Admin", "SYSTEM"];
-        if (forbidden.includes(name)) {
-            callback({ success: false, message: "Name 'ADMIN' is reserved." });
-        } else if (name === "gusztika007xd") {
-            callback({ success: true });
-        } else if (scores.hasOwnProperty(name)) {
-            callback({ success: false, message: "Name already taken!" });
-        } else {
-            callback({ success: true });
-        }
+        const forbidden = ["ADMIN", "admin", "SYSTEM"];
+        if (forbidden.includes(name)) return callback({ success: false, message: "Name reserved." });
+        if (name === "gusztika007xd") return callback({ success: true });
+        if (scores.hasOwnProperty(name)) return callback({ success: false, message: "Name taken!" });
+        callback({ success: true });
+    });
+
+    socket.on('set_correct_answer', (val) => { correctAnswer = val; });
+
+    socket.on('toggle_lock', (status) => {
+        submissionsLocked = status;
+        io.emit('lock_status', submissionsLocked);
     });
 
     socket.on('set_limit', (num) => {
@@ -42,25 +47,38 @@ io.on('connection', (socket) => {
     });
 
     socket.on('submit_answer', (data) => {
-        const name = data.name;
-        if (name !== "ADMIN" && name !== "gusztika007xd" && submissionLimit > 0) {
-            playerMessageCounts[name] = (playerMessageCounts[name] || 0) + 1;
-            if (playerMessageCounts[name] > submissionLimit) return;
+        if (submissionsLocked && data.name !== "ADMIN" && data.name !== "gusztika007xd") return;
+
+        // Limit checking
+        if (data.name !== "ADMIN" && data.name !== "gusztika007xd" && submissionLimit > 0) {
+            playerMessageCounts[data.name] = (playerMessageCounts[data.name] || 0) + 1;
+            if (playerMessageCounts[data.name] > submissionLimit) return;
+        }
+
+        // Answer validation logic
+        let isCorrect = false;
+        if (correctAnswer.trim() !== "" && data.name !== "ADMIN" && data.name !== "gusztika007xd") {
+            const validAnswers = correctAnswer.split(',').map(a => a.trim());
+            if (validAnswers.includes(data.text.trim())) {
+                isCorrect = true;
+            }
         }
 
         const entry = {
             id: Date.now() + Math.random(),
-            name: name,
+            name: data.name,
             text: data.text,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            isCorrect: isCorrect
         };
         
         logs.push(entry);
-        if (name !== "ADMIN" && name !== "gusztika007xd" && !(name in scores)) {
-            scores[name] = 0;
+        if (data.name !== "ADMIN" && data.name !== "gusztika007xd" && !(data.name in scores)) {
+            scores[data.name] = 0;
         }
         
         io.emit('new_log', entry);
+        if (isCorrect) socket.emit('correct_notification'); // Only tell the person who got it right
         io.emit('update_scoreboard', { scores, visible: showScoreboard }); 
     });
 
