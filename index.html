@@ -28,8 +28,7 @@
     </style>
 </head>
 <body>
-    <audio id="ting-sound" src="https://assets.mixkit.co/active_storage/sfx/3005/3005-preview.mp3"></audio>
-
+    <audio id="ting-sound" src="ting.mp3" preload="auto"></audio>
     <div id="login-screen" class="card">
         <input type="text" id="username" placeholder="Enter name" onkeydown="if(event.key==='Enter') login()">
         <button class="btn-blue" onclick="login()">Enter Game</button>
@@ -94,20 +93,28 @@
         let isScoreboardVisible = true;
 
         function login() {
-            const nameInput = document.getElementById('username').value.trim();
-            socket.emit('check_name', nameInput, (res) => {
-                if (res.success) {
-                    myName = nameInput;
-                    document.getElementById('login-screen').classList.add('hidden');
-                    document.getElementById('scoreboard-view').classList.remove('hidden');
-                    if (res.isAdmin) document.getElementById('admin-screen').classList.remove('hidden');
-                    else {
-                        document.getElementById('user-screen').classList.remove('hidden');
-                        document.getElementById('welcome-msg').innerText = "Player: " + myName;
-                    }
-                } else alert(res.message);
-            });
-        }
+    const nameInput = document.getElementById('username').value.trim();
+    
+    // Unlocks audio for mobile browsers on the first tap
+    const audio = document.getElementById('ting-sound');
+    audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+    }).catch(e => console.log("Audio unlock failed:", e));
+
+    socket.emit('check_name', nameInput, (res) => {
+        if (res.success) {
+            myName = nameInput;
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('scoreboard-view').classList.remove('hidden');
+            if (res.isAdmin) document.getElementById('admin-screen').classList.remove('hidden');
+            else {
+                document.getElementById('user-screen').classList.remove('hidden');
+                document.getElementById('welcome-msg').innerText = "Player: " + myName;
+            }
+        } else alert(res.message);
+    });
+}
 
         socket.on('play_ting', () => { document.getElementById('ting-sound').play(); });
 
