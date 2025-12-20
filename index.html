@@ -19,7 +19,6 @@
         .log-entry { border-left: 5px solid #007bff; padding: 10px; margin: 5px 0; background: #fff; display: flex; justify-content: space-between; }
         .quick-buttons { display: flex; gap: 5px; margin-bottom: 10px; }
         .quick-buttons button { flex: 1; }
-        
         @media (min-width: 600px) {
             body { padding: 40px; }
             input[type="text"], input[type="number"] { width: 250px; margin-bottom: 0; }
@@ -29,6 +28,7 @@
     </style>
 </head>
 <body>
+    <audio id="ting-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
 
     <div id="login-screen" class="card">
         <input type="text" id="username" placeholder="Enter name" onkeydown="if(event.key==='Enter') login()">
@@ -66,11 +66,15 @@
             <input type="text" id="admin-msg" placeholder="Admin message..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
             <button class="btn-blue" onclick="sendAdminMsg()">Send as ADMIN</button>
             <button id="lock-btn" class="btn-orange" onclick="toggleLock()">Lock Submissions</button>
-            <button id="toggle-sb-btn" class="btn-blue" onclick="toggleScoreboard()">Hide Scoreboard</button>
+            <button class="btn-blue" onclick="toggleScoreboard()">Show/Hide Scoreboard</button>
         </div>
         <div class="card">
-            <label>Correct Answer (commas for multiple):</label><br>
-            <input type="text" id="correct-input" placeholder="e.g. Ahri, ahri" onchange="updateCorrect()">
+            <button class="btn-green" onclick="socket.emit('order_scoreboard')">Order Scoreboard (Highest First)</button>
+            <button class="btn-orange" onclick="socket.emit('reset_stars')">Reset Winners (*)</button>
+        </div>
+        <div class="card">
+            <label>Correct Answer:</label>
+            <input type="text" id="correct-input" placeholder="Ahri, ahri" onchange="updateCorrect()">
             <br><label>Limit:</label>
             <input type="number" id="limit-input" value="1" style="width: 60px;">
             <button class="btn-blue" onclick="setLimit()">Set Limit / Reset</button>
@@ -89,15 +93,14 @@
         let isLocked = false;
 
         function login() {
-            const name = document.getElementById('username').value.trim();
-            socket.emit('check_name', name, (res) => {
+            const nameInput = document.getElementById('username').value.trim();
+            socket.emit('check_name', nameInput, (res) => {
                 if (res.success) {
-                    myName = name;
+                    myName = nameInput;
                     document.getElementById('login-screen').classList.add('hidden');
                     document.getElementById('scoreboard-view').classList.remove('hidden');
-                    if (myName === "gusztika007xd") {
-                        document.getElementById('admin-screen').classList.remove('hidden');
-                    } else {
+                    if (res.isAdmin) document.getElementById('admin-screen').classList.remove('hidden');
+                    else {
                         document.getElementById('user-screen').classList.remove('hidden');
                         document.getElementById('welcome-msg').innerText = "Player: " + myName;
                     }
@@ -105,29 +108,19 @@
             });
         }
 
-        function toggleLock() {
-            isLocked = !isLocked;
-            socket.emit('toggle_lock', isLocked);
-        }
+        socket.on('play_ting', () => { document.getElementById('ting-sound').play(); });
+
+        function toggleLock() { isLocked = !isLocked; socket.emit('toggle_lock', isLocked); }
 
         socket.on('lock_status', (status) => {
             isLocked = status;
-            if (myName === "gusztika007xd") {
+            if (document.getElementById('lock-btn')) {
                 document.getElementById('lock-btn').innerText = isLocked ? "Unlock Submissions" : "Lock Submissions";
-                document.getElementById('lock-btn').className = isLocked ? "btn-green" : "btn-orange";
             }
             updateLimitDisplay();
         });
 
-        function updateCorrect() {
-            socket.emit('set_correct_answer', document.getElementById('correct-input').value);
-        }
-
-        function toggleScoreboard() {
-            scoreboardVisible = !scoreboardVisible;
-            socket.emit('toggle_scoreboard', scoreboardVisible);
-        }
-
+        function updateCorrect() { socket.emit('set_correct_answer', document.getElementById('correct-input').value); }
         function sendAnswer() {
             if (isLocked) return;
             const box = document.getElementById('answer');
@@ -148,6 +141,7 @@
         function updateLimitDisplay() {
             const status = document.getElementById('limit-status');
             const btn = document.getElementById('submit-btn');
+            if (!status || !btn) return;
             if (isLocked && myName !== "gusztika007xd") {
                 status.innerText = "Submissions Locked";
                 btn.disabled = true;
@@ -177,7 +171,7 @@
         socket.on('new_log', (data) => {
             const isAdm = data.name === "ADMIN";
             const time = `[${data.time}]`;
-            if (myName === "gusztika007xd") {
+            if (document.getElementById('admin-logs')) {
                 const div = document.getElementById('admin-logs');
                 const entry = document.createElement('div');
                 entry.id = `log-${data.id}`;
@@ -203,7 +197,7 @@
         });
 
         socket.on('update_scoreboard', (d) => {
-            const { scores, visible } = d;
+            const { scores, winners, visible } = d;
             const view = document.getElementById('scoreboard-view');
             const cont = document.getElementById('scoreboard-display');
             const ctrl = document.getElementById('score-controls');
@@ -211,18 +205,21 @@
             cont.innerHTML = "";
             let cHTML = "<h3>Scores</h3>";
             for (let n in scores) {
-                cont.innerHTML += `<div>${n}: ${scores[n]} pts</div>`;
-                if (myName === "gusztika007xd") {
-                    cHTML += `<div class="score-item"><span>${n}: <b>${scores[n]}</b></span><div>
+                const isWinner = winners.includes(n);
+                const displayName = isWinner ? `* ${n}` : n;
+                cont.innerHTML += `<div>${displayName}: ${scores[n]} pts</div>`;
+                if (ctrl) {
+                    cHTML += `<div class="score-item"><span>${displayName}: <b>${scores[n]}</b></span><div>
                         <button class="btn-blue" onclick="socket.emit('update_score',{name:'${n}',delta:1})">+</button>
                         <button class="btn-blue" onclick="socket.emit('update_score',{name:'${n}',delta:-1})">-</button>
                         <button class="btn-red" onclick="if(confirm('Del ${n}?')) socket.emit('delete_player','${n}')">X</button>
                     </div></div>`;
                 }
             }
-            if (myName === "gusztika007xd") ctrl.innerHTML = cHTML;
+            if (ctrl) ctrl.innerHTML = cHTML;
         });
 
+        function toggleScoreboard() { socket.emit('toggle_scoreboard', !document.getElementById('scoreboard-view').classList.contains('hidden')); }
         function setLimit() { socket.emit('set_limit', document.getElementById('limit-input').value); }
     </script>
 </body>
