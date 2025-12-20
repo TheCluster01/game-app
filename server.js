@@ -9,28 +9,39 @@ const io = new Server(server);
 
 let logs = []; 
 let scores = {}; 
+let winners = []; // Tracks names with stars
 let showScoreboard = true;
 let submissionsLocked = false;
-let correctAnswer = ""; // Admin sets this
+let correctAnswer = ""; 
 let submissionLimit = 0; 
 let playerMessageCounts = {}; 
+
+app.use(express.static(path.join(__dirname)));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+function getLocalTime() {
+    // Adds 1 hour to the server UTC time
+    const d = new Date();
+    const local = new Date(d.getTime() + (1 * 60 * 60 * 1000));
+    return local.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
 io.on('connection', (socket) => {
     socket.emit('load_history', logs);
-    socket.emit('update_scoreboard', { scores, visible: showScoreboard });
+    socket.emit('update_scoreboard', { scores, winners, visible: showScoreboard });
     socket.emit('update_limit', submissionLimit);
     socket.emit('lock_status', submissionsLocked);
 
     socket.on('check_name', (name, callback) => {
         const forbidden = ["ADMIN", "admin", "SYSTEM"];
+        const secretAdminName = "gusztika007xd";
         if (forbidden.includes(name)) return callback({ success: false, message: "Name reserved." });
-        if (name === "gusztika007xd") return callback({ success: true });
+        if (name === secretAdminName) return callback({ success: true, isAdmin: true });
         if (scores.hasOwnProperty(name)) return callback({ success: false, message: "Name taken!" });
-        callback({ success: true });
+        callback({ success: true, isAdmin: false });
     });
 
     socket.on('set_correct_answer', (val) => { correctAnswer = val; });
@@ -38,6 +49,20 @@ io.on('connection', (socket) => {
     socket.on('toggle_lock', (status) => {
         submissionsLocked = status;
         io.emit('lock_status', submissionsLocked);
+    });
+
+    socket.on('reset_stars', () => {
+        winners = [];
+        io.emit('update_scoreboard', { scores, winners, visible: showScoreboard });
+    });
+
+    socket.on('order_scoreboard', () => {
+        // Sorts scores object by value descending
+        const sortedEntries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+        const newScores = {};
+        sortedEntries.forEach(([key, val]) => newScores[key] = val);
+        scores = newScores;
+        io.emit('update_scoreboard', { scores, winners, visible: showScoreboard });
     });
 
     socket.on('set_limit', (num) => {
@@ -49,18 +74,20 @@ io.on('connection', (socket) => {
     socket.on('submit_answer', (data) => {
         if (submissionsLocked && data.name !== "ADMIN" && data.name !== "gusztika007xd") return;
 
-        // Limit checking
         if (data.name !== "ADMIN" && data.name !== "gusztika007xd" && submissionLimit > 0) {
             playerMessageCounts[data.name] = (playerMessageCounts[data.name] || 0) + 1;
             if (playerMessageCounts[data.name] > submissionLimit) return;
         }
 
-        // Answer validation logic
         let isCorrect = false;
         if (correctAnswer.trim() !== "" && data.name !== "ADMIN" && data.name !== "gusztika007xd") {
             const validAnswers = correctAnswer.split(',').map(a => a.trim());
             if (validAnswers.includes(data.text.trim())) {
                 isCorrect = true;
+                if (!winners.includes(data.name)) {
+                    winners.push(data.name);
+                }
+                io.emit('play_ting');
             }
         }
 
@@ -68,7 +95,7 @@ io.on('connection', (socket) => {
             id: Date.now() + Math.random(),
             name: data.name,
             text: data.text,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            time: getLocalTime(),
             isCorrect: isCorrect
         };
         
@@ -78,8 +105,8 @@ io.on('connection', (socket) => {
         }
         
         io.emit('new_log', entry);
-        if (isCorrect) socket.emit('correct_notification'); // Only tell the person who got it right
-        io.emit('update_scoreboard', { scores, visible: showScoreboard }); 
+        if (isCorrect) socket.emit('correct_notification');
+        io.emit('update_scoreboard', { scores, winners, visible: showScoreboard }); 
     });
 
     socket.on('delete_msg', (id) => {
@@ -89,20 +116,21 @@ io.on('connection', (socket) => {
 
     socket.on('toggle_scoreboard', (status) => {
         showScoreboard = status;
-        io.emit('update_scoreboard', { scores, visible: showScoreboard });
+        io.emit('update_scoreboard', { scores, winners, visible: showScoreboard });
     });
 
     socket.on('update_score', (data) => {
         if (scores[data.name] !== undefined) {
             scores[data.name] += data.delta;
-            io.emit('update_scoreboard', { scores, visible: showScoreboard });
+            io.emit('update_scoreboard', { scores, winners, visible: showScoreboard });
         }
     });
 
     socket.on('delete_player', (name) => {
         delete scores[name];
+        winners = winners.filter(n => n !== name);
         delete playerMessageCounts[name];
-        io.emit('update_scoreboard', { scores, visible: showScoreboard });
+        io.emit('update_scoreboard', { scores, winners, visible: showScoreboard });
     });
 });
 
