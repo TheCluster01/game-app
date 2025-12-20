@@ -66,6 +66,7 @@
             <input type="text" id="admin-msg" placeholder="Admin message..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
             <button class="btn-blue" onclick="sendAdminMsg()">Send as ADMIN</button>
             <button id="lock-btn" class="btn-orange" onclick="toggleLock()">Lock Submissions</button>
+            <button id="toggle-sb-btn" class="btn-blue" onclick="toggleScoreboard()">Hide Scoreboard</button>
         </div>
         <div class="card">
             <label>Correct Answer (commas for multiple):</label><br>
@@ -120,6 +121,11 @@
 
         function updateCorrect() {
             socket.emit('set_correct_answer', document.getElementById('correct-input').value);
+        }
+
+        function toggleScoreboard() {
+            scoreboardVisible = !scoreboardVisible;
+            socket.emit('toggle_scoreboard', scoreboardVisible);
         }
 
         function sendAnswer() {
