@@ -28,7 +28,7 @@
     </style>
 </head>
 <body>
-    <audio id="ting-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
+    <audio id="ting-sound" src="https://assets.mixkit.co/active_storage/sfx/3005/3005-preview.mp3"></audio>
 
     <div id="login-screen" class="card">
         <input type="text" id="username" placeholder="Enter name" onkeydown="if(event.key==='Enter') login()">
@@ -66,7 +66,7 @@
             <input type="text" id="admin-msg" placeholder="Admin message..." onkeydown="if(event.key==='Enter') sendAdminMsg()">
             <button class="btn-blue" onclick="sendAdminMsg()">Send as ADMIN</button>
             <button id="lock-btn" class="btn-orange" onclick="toggleLock()">Lock Submissions</button>
-            <button class="btn-blue" onclick="toggleScoreboard()">Show/Hide Scoreboard</button>
+            <button id="scoreboard-toggle-btn" class="btn-blue" onclick="toggleScoreboard()">Hide Scoreboard</button>
         </div>
         <div class="card">
             <button class="btn-green" onclick="socket.emit('order_scoreboard')">Order Scoreboard (Highest First)</button>
@@ -91,6 +91,7 @@
         let currentLimit = 0;
         let messagesSentThisRound = 0;
         let isLocked = false;
+        let isScoreboardVisible = true;
 
         function login() {
             const nameInput = document.getElementById('username').value.trim();
@@ -198,10 +199,18 @@
 
         socket.on('update_scoreboard', (d) => {
             const { scores, winners, visible } = d;
+            isScoreboardVisible = visible;
             const view = document.getElementById('scoreboard-view');
             const cont = document.getElementById('scoreboard-display');
             const ctrl = document.getElementById('score-controls');
-            if (myName !== "gusztika007xd") view.className = visible ? "" : "hidden";
+            const toggleBtn = document.getElementById('scoreboard-toggle-btn');
+
+            if (myName !== "gusztika007xd") {
+                view.className = isScoreboardVisible ? "" : "hidden";
+            } else {
+                toggleBtn.innerText = isScoreboardVisible ? "Hide Scoreboard" : "Show Scoreboard";
+            }
+
             cont.innerHTML = "";
             let cHTML = "<h3>Scores</h3>";
             for (let n in scores) {
@@ -219,7 +228,11 @@
             if (ctrl) ctrl.innerHTML = cHTML;
         });
 
-        function toggleScoreboard() { socket.emit('toggle_scoreboard', !document.getElementById('scoreboard-view').classList.contains('hidden')); }
+        function toggleScoreboard() { 
+            isScoreboardVisible = !isScoreboardVisible; 
+            socket.emit('toggle_scoreboard', isScoreboardVisible); 
+        }
+        
         function setLimit() { socket.emit('set_limit', document.getElementById('limit-input').value); }
     </script>
 </body>
