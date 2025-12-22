@@ -7,21 +7,24 @@
         body { font-family: sans-serif; padding: 10px; background: #f4f4f9; }
         .hidden { display: none; }
         .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px; }
-        input[type="text"], input[type="number"] { width: 100%; padding: 12px; margin-bottom: 10px; box-sizing: border-box; font-size: 16px; }
+        input[type="text"], input[type="number"], textarea { width: 100%; padding: 12px; margin-bottom: 10px; box-sizing: border-box; font-size: 16px; }
+        textarea { height: 80px; font-family: sans-serif; resize: vertical; }
         button { width: 100%; padding: 12px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; margin-bottom: 5px; }
         .btn-blue { background: #007bff; color: white; }
         .btn-red { background: #dc3545; color: white; }
         .btn-green { background: #28a745; color: white; }
         .btn-orange { background: #fd7e14; color: white; }
+        .btn-purple { background: #6f42c1; color: white; }
         .admin-msg-style { border: 2px solid #dc3545; color: #dc3545; font-weight: bold; }
         .correct-msg-style { border: 2px solid #28a745; color: #28a745; font-weight: bold; }
+        .half-correct-msg-style { border: 2px solid #6f42c1; color: #6f42c1; font-weight: bold; }
         #scoreboard-display { background: #333; color: gold; padding: 10px; border-radius: 5px; }
         .log-entry { border-left: 5px solid #007bff; padding: 10px; margin: 5px 0; background: #fff; display: flex; justify-content: space-between; }
         .quick-buttons { display: flex; gap: 5px; margin-bottom: 10px; }
         .quick-buttons button { flex: 1; }
         @media (min-width: 600px) {
             body { padding: 40px; }
-            input[type="text"], input[type="number"] { width: 250px; margin-bottom: 0; }
+            input[type="text"], input[type="number"], textarea { width: 250px; margin-bottom: 0; }
             button { width: auto; }
             .score-item { display: flex; justify-content: space-between; align-items: center; max-width: 500px; border-bottom: 1px solid #ddd; padding: 10px 0; }
         }
@@ -29,6 +32,8 @@
 </head>
 <body>
     <audio id="ting-sound" src="ting.mp3" preload="auto"></audio>
+    <audio id="almost-sound" src="almost.mp3" preload="auto"></audio>
+    
     <div id="login-screen" class="card">
         <input type="text" id="username" placeholder="Enter name" onkeydown="if(event.key==='Enter') login()">
         <button class="btn-blue" onclick="login()">Enter Game</button>
@@ -46,9 +51,7 @@
             <button id="submit-btn" class="btn-blue" onclick="sendAnswer()">Submit</button>
             <p id="limit-status" style="font-weight: bold; color: #555;"></p>
         </div>
-        <div id="correct-notif" class="hidden btn-green" style="padding: 10px; text-align: center; border-radius: 8px; margin-bottom: 10px;">
-            CORRECT! 🎉
-        </div>
+        <div id="correct-notif" class="hidden" style="padding: 10px; text-align: center; border-radius: 8px; margin-bottom: 10px; color: white; font-weight: bold;"></div>
         <h3>My Answers (Newest first):</h3>
         <div id="my-history"></div>
     </div>
@@ -72,8 +75,8 @@
             <button class="btn-orange" onclick="socket.emit('reset_stars')">Reset Winners (*)</button>
         </div>
         <div class="card">
-            <label>Correct Answer:</label>
-            <input type="text" id="correct-input" placeholder="Ahri, ahri" onchange="updateCorrect()">
+            <label>Correct Answer Logic (multiple lines or commas):</label>
+            <textarea id="correct-input" placeholder="ahri+kda, yasuo, lux+elementalist" onchange="updateCorrect()"></textarea>
             <br><label>Limit:</label>
             <input type="number" id="limit-input" value="1" style="width: 60px;">
             <button class="btn-blue" onclick="setLimit()">Set Limit / Reset</button>
@@ -93,30 +96,30 @@
         let isScoreboardVisible = true;
 
         function login() {
-    const nameInput = document.getElementById('username').value.trim();
-    
-    // Unlocks audio for mobile browsers on the first tap
-    const audio = document.getElementById('ting-sound');
-    audio.play().then(() => {
-        audio.pause();
-        audio.currentTime = 0;
-    }).catch(e => console.log("Audio unlock failed:", e));
+            const nameInput = document.getElementById('username').value.trim();
+            const ting = document.getElementById('ting-sound');
+            const almost = document.getElementById('almost-sound');
+            
+            [ting, almost].forEach(a => {
+                a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {});
+            });
 
-    socket.emit('check_name', nameInput, (res) => {
-        if (res.success) {
-            myName = nameInput;
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('scoreboard-view').classList.remove('hidden');
-            if (res.isAdmin) document.getElementById('admin-screen').classList.remove('hidden');
-            else {
-                document.getElementById('user-screen').classList.remove('hidden');
-                document.getElementById('welcome-msg').innerText = "Player: " + myName;
-            }
-        } else alert(res.message);
-    });
-}
+            socket.emit('check_name', nameInput, (res) => {
+                if (res.success) {
+                    myName = nameInput;
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('scoreboard-view').classList.remove('hidden');
+                    if (res.isAdmin) document.getElementById('admin-screen').classList.remove('hidden');
+                    else {
+                        document.getElementById('user-screen').classList.remove('hidden');
+                        document.getElementById('welcome-msg').innerText = "Player: " + myName;
+                    }
+                } else alert(res.message);
+            });
+        }
 
         socket.on('play_ting', () => { document.getElementById('ting-sound').play(); });
+        socket.on('play_almost', () => { document.getElementById('almost-sound').play(); });
 
         function toggleLock() { isLocked = !isLocked; socket.emit('toggle_lock', isLocked); }
 
@@ -140,8 +143,10 @@
             updateLimitDisplay();
         }
 
-        socket.on('correct_notification', () => {
+        socket.on('correct_notification', (msg) => {
             const notif = document.getElementById('correct-notif');
+            notif.innerText = msg;
+            notif.className = msg.includes('CORRECT') ? 'btn-green' : 'btn-purple';
             notif.classList.remove('hidden');
             setTimeout(() => notif.classList.add('hidden'), 3000);
         });
@@ -185,6 +190,7 @@
                 entry.id = `log-${data.id}`;
                 entry.className = 'log-entry';
                 if(data.isCorrect) entry.style.borderLeft = "10px solid #28a745";
+                else if(data.isHalfCorrect) entry.style.borderLeft = "10px solid #6f42c1";
                 entry.innerHTML = `<span><b>${time} ${data.name}:</b> ${data.text}</span>
                                    <button class="btn-red" onclick="socket.emit('delete_msg', ${data.id})">Del</button>`;
                 div.prepend(entry);
@@ -193,7 +199,11 @@
                 const hist = document.getElementById('my-history');
                 const card = document.createElement('div');
                 card.id = `cl-${data.id}`;
-                card.className = 'card' + (isAdm ? ' admin-msg-style' : '') + (data.isCorrect ? ' correct-msg-style' : '');
+                let styleClass = isAdm ? ' admin-msg-style' : '';
+                if(data.isCorrect) styleClass += ' correct-msg-style';
+                else if(data.isHalfCorrect) styleClass += ' half-correct-msg-style';
+                
+                card.className = 'card' + styleClass;
                 card.innerHTML = `<b>${time} ${isAdm ? 'ADMIN' : ''}:</b> ${data.text} <button onclick="this.parentElement.remove()" style="font-size:10px">X</button>`;
                 hist.prepend(card);
             }
