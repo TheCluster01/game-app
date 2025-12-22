@@ -15,6 +15,7 @@
         .btn-green { background: #28a745; color: white; }
         .btn-orange { background: #fd7e14; color: white; }
         .btn-purple { background: #6f42c1; color: white; }
+        .status-badge { font-size: 12px; padding: 2px 6px; border-radius: 10px; margin-left: 5px; color: white; }
         .admin-msg-style { border: 2px solid #dc3545; color: #dc3545; font-weight: bold; }
         .correct-msg-style { border: 2px solid #28a745; color: #28a745; font-weight: bold; }
         .half-correct-msg-style { border: 2px solid #6f42c1; color: #6f42c1; font-weight: bold; }
@@ -75,8 +76,8 @@
             <button class="btn-orange" onclick="socket.emit('reset_stars')">Reset Winners (*)</button>
         </div>
         <div class="card">
-            <label>Correct Answer Logic (multiple lines or commas):</label>
-            <textarea id="correct-input" placeholder="ahri+kda, yasuo, lux+elementalist" onchange="updateCorrect()"></textarea>
+            <label>Correct Answer Logic:</label>
+            <textarea id="correct-input" placeholder="ahri+kda, yasuo" onchange="updateCorrect()"></textarea>
             <br><label>Limit:</label>
             <input type="number" id="limit-input" value="1" style="width: 60px;">
             <button class="btn-blue" onclick="setLimit()">Set Limit / Reset</button>
@@ -99,7 +100,6 @@
             const nameInput = document.getElementById('username').value.trim();
             const ting = document.getElementById('ting-sound');
             const almost = document.getElementById('almost-sound');
-            
             [ting, almost].forEach(a => {
                 a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {});
             });
@@ -202,7 +202,6 @@
                 let styleClass = isAdm ? ' admin-msg-style' : '';
                 if(data.isCorrect) styleClass += ' correct-msg-style';
                 else if(data.isHalfCorrect) styleClass += ' half-correct-msg-style';
-                
                 card.className = 'card' + styleClass;
                 card.innerHTML = `<b>${time} ${isAdm ? 'ADMIN' : ''}:</b> ${data.text} <button onclick="this.parentElement.remove()" style="font-size:10px">X</button>`;
                 hist.prepend(card);
@@ -215,41 +214,42 @@
         });
 
         socket.on('update_scoreboard', (d) => {
-            const { scores, winners, visible } = d;
+            const { scores, winners, roundStatus, visible } = d;
             isScoreboardVisible = visible;
             const view = document.getElementById('scoreboard-view');
             const cont = document.getElementById('scoreboard-display');
             const ctrl = document.getElementById('score-controls');
             const toggleBtn = document.getElementById('scoreboard-toggle-btn');
 
-            if (myName !== "gusztika007xd") {
-                view.className = isScoreboardVisible ? "" : "hidden";
-            } else {
-                toggleBtn.innerText = isScoreboardVisible ? "Hide Scoreboard" : "Show Scoreboard";
-            }
+            if (myName !== "gusztika007xd") view.className = isScoreboardVisible ? "" : "hidden";
+            else toggleBtn.innerText = isScoreboardVisible ? "Hide Scoreboard" : "Show Scoreboard";
 
             cont.innerHTML = "";
             let cHTML = "<h3>Scores</h3>";
             for (let n in scores) {
                 const isWinner = winners.includes(n);
-                const displayName = isWinner ? `* ${n}` : n;
+                const status = roundStatus[n] || "";
+                let statusBadge = "";
+                if(status === "Full") statusBadge = `<span class="status-badge btn-green">Full</span>`;
+                else if(status === "Half") statusBadge = `<span class="status-badge btn-purple">Half</span>`;
+
+                const displayName = (isWinner ? `* ${n}` : n);
                 cont.innerHTML += `<div>${displayName}: ${scores[n]} pts</div>`;
                 if (ctrl) {
-                    cHTML += `<div class="score-item"><span>${displayName}: <b>${scores[n]}</b></span><div>
-                        <button class="btn-blue" onclick="socket.emit('update_score',{name:'${n}',delta:1})">+</button>
-                        <button class="btn-blue" onclick="socket.emit('update_score',{name:'${n}',delta:-1})">-</button>
-                        <button class="btn-red" onclick="if(confirm('Del ${n}?')) socket.emit('delete_player','${n}')">X</button>
-                    </div></div>`;
+                    cHTML += `<div class="score-item">
+                        <span>${displayName} ${statusBadge}: <b>${scores[n]}</b></span>
+                        <div>
+                            <button class="btn-blue" onclick="socket.emit('update_score',{name:'${n}',delta:1})">+</button>
+                            <button class="btn-blue" onclick="socket.emit('update_score',{name:'${n}',delta:-1})">-</button>
+                            <button class="btn-red" onclick="if(confirm('Del ${n}?')) socket.emit('delete_player','${n}')">X</button>
+                        </div>
+                    </div>`;
                 }
             }
             if (ctrl) ctrl.innerHTML = cHTML;
         });
 
-        function toggleScoreboard() { 
-            isScoreboardVisible = !isScoreboardVisible; 
-            socket.emit('toggle_scoreboard', isScoreboardVisible); 
-        }
-        
+        function toggleScoreboard() { isScoreboardVisible = !isScoreboardVisible; socket.emit('toggle_scoreboard', isScoreboardVisible); }
         function setLimit() { socket.emit('set_limit', document.getElementById('limit-input').value); }
     </script>
 </body>
