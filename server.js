@@ -16,6 +16,10 @@ let correctAnswer = "";
 let submissionLimit = 0; 
 let playerMessageCounts = {}; 
 
+// Logic for automatic points
+let currentPointsValue = 0; 
+let playersWhoScoredThisRound = new Set(); 
+
 app.use(express.static(path.join(__dirname)));
 
 app.get('/', (req, res) => {
@@ -77,18 +81,62 @@ io.on('connection', (socket) => {
     socket.on('submit_answer', (data) => {
         if (submissionsLocked && data.name !== "ADMIN" && data.name !== "gusztika007xd") return;
 
+        // Reset points logic if ADMIN sends "--- NEW ROUND ---"
+        if (data.name === "ADMIN" && data.text === "--- NEW ROUND ---") {
+            playersWhoScoredThisRound.clear();
+            currentPointsValue = 0;
+        }
+
+        // Set points value based on 1, 2, 3 buttons
+        if (data.name === "ADMIN" && ["1", "2", "3"].includes(data.text)) {
+            currentPointsValue = parseInt(data.text);
+        }
+
         if (data.name !== "ADMIN" && data.name !== "gusztika007xd" && submissionLimit > 0) {
             playerMessageCounts[data.name] = (playerMessageCounts[data.name] || 0) + 1;
             if (playerMessageCounts[data.name] > submissionLimit) return;
         }
 
         let isCorrect = false;
+        let isHalfCorrect = false;
+
         if (correctAnswer.trim() !== "" && data.name !== "ADMIN" && data.name !== "gusztika007xd") {
-            const validAnswers = correctAnswer.split(',').map(a => a.trim());
-            if (validAnswers.includes(data.text.trim())) {
-                isCorrect = true;
+            const playerInput = data.text.toLowerCase().trim();
+            const groups = correctAnswer.split(',').map(g => g.trim().toLowerCase());
+
+            for (let group of groups) {
+                if (group.includes('+')) {
+                    const components = group.split('+').map(c => c.trim());
+                    const matches = components.filter(c => playerInput.includes(c));
+                    
+                    if (matches.length === components.length) {
+                        isCorrect = true;
+                        break;
+                    } else if (matches.length > 0) {
+                        isHalfCorrect = true;
+                    }
+                } else {
+                    if (playerInput.includes(group)) {
+                        isCorrect = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isCorrect) {
                 if (!winners.includes(data.name)) winners.push(data.name);
                 io.emit('play_ting');
+                // Give points if not already scored
+                if (!playersWhoScoredThisRound.has(data.name) && currentPointsValue > 0) {
+                    scores[data.name] = (scores[data.name] || 0) + currentPointsValue;
+                    playersWhoScoredThisRound.add(data.name);
+                }
+            } else if (isHalfCorrect) {
+                io.emit('play_almost');
+                if (!playersWhoScoredThisRound.has(data.name) && currentPointsValue > 0) {
+                    scores[data.name] = (scores[data.name] || 0) + currentPointsValue;
+                    playersWhoScoredThisRound.add(data.name);
+                }
             }
         }
 
@@ -97,7 +145,8 @@ io.on('connection', (socket) => {
             name: data.name,
             text: data.text,
             time: getLocalTime(),
-            isCorrect: isCorrect
+            isCorrect: isCorrect,
+            isHalfCorrect: isHalfCorrect
         };
         
         logs.push(entry);
@@ -106,7 +155,8 @@ io.on('connection', (socket) => {
         }
         
         io.emit('new_log', entry);
-        if (isCorrect) socket.emit('correct_notification');
+        if (isCorrect) socket.emit('correct_notification', 'CORRECT! 🎉');
+        if (isHalfCorrect && !isCorrect) socket.emit('correct_notification', 'ALMOST! (Half-Correct) 🤔');
         io.emit('update_scoreboard', { scores, winners, visible: showScoreboard }); 
     });
 
